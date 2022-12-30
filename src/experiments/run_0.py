@@ -1,17 +1,25 @@
 import functools
+import logging
 import multiprocessing
-from typing import Optional
+import os
 
+import nltk
 import pyterrier as pt
+from nltk import downloader
 
 from src import utils
-from src.types import Documents, Experiment, IndexRef, Results, Topics
+from src.types import LAN, Documents, Experiment, IndexRef, Results, Topics
 
 
-class Run0EN(Experiment):
-    def get_index(self, index_path: str, documents: Documents) -> IndexRef:
+class Run0(Experiment):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+        self._weighting_model = "Tf"
+
+    def get_index(self, documents: Documents) -> IndexRef:
         indexer = pt.IterDictIndexer(
-            index_path,
+            self._index_path,
             threads=self._threads,
             overwrite=True,
             stemmer="none",
@@ -19,28 +27,79 @@ class Run0EN(Experiment):
             tokeniser="whitespace",
         )
 
-        tokeniser_partial = functools.partial(
-            utils.tokenise, tokeniser=utils.basic_tokeniser
+        doc_tokenizer = functools.partial(
+            utils.doc_text_transform, transform=utils.basic_tokenizer
         )
         with multiprocessing.Pool(self._threads) as pool:
-            return indexer.index(
-                pool.imap(tokeniser_partial, documents), fields=["text"]
-            )
+            return indexer.index(pool.imap(doc_tokenizer, documents), fields=["text"])
 
     def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
-        retrieve = pt.BatchRetrieve(index_ref, {"wmmodel": "TF_IDF"}) % 1000
+        retrieve = pt.BatchRetrieve(index_ref, wmodel=self._weighting_model) % 1000
         retrieve = pt.apply.query(utils.sanitize_query) >> retrieve
         retrieve = (
-            pt.apply.query(lambda row: utils.basic_tokeniser(row.query)) >> retrieve
+            pt.apply.query(lambda row: utils.basic_tokenizer(row.query)) >> retrieve
         )
 
         return retrieve.transform(topics)
 
 
-class Run0CS(Experiment):
-    def get_index(self, index_path: str, documents: Documents) -> IndexRef:
+class Run0TfIdf(Run0):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._weighting_model = "TF_IDF"
+
+
+# -------------------------------------------------------------------------------------
+#                                       TOKENIZATION
+# -------------------------------------------------------------------------------------
+
+
+class Run0PyTerrierTok(Run0TfIdf):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-pyterrier-tok_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+    def get_index(self, documents: Documents) -> IndexRef:
         indexer = pt.IterDictIndexer(
-            index_path,
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="none",
+            stopwords="none",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
+        )
+
+        return indexer.index(documents)
+
+    def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
+        retrieve = pt.BatchRetrieve(index_ref, wmodel=self._weighting_model) % 1000
+        retrieve = pt.apply.query(utils.sanitize_query) >> retrieve
+
+        return retrieve.transform(topics)
+
+
+class Run0NlktTok(Run0TfIdf):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-nltk-tok_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+        nltk_downloader = downloader.Downloader()
+        if not nltk_downloader.is_installed("punkt"):
+            logging.info("Downloading punkt package from nltk.")
+            nltk.download("punkt")
+            logging.info("Done")
+
+        self._text_tokenizer = functools.partial(
+            utils.nlkt_tokenizer,
+            language="english" if self._lan == LAN.EN else "czech",
+        )
+        self._doc_tokenizer = functools.partial(
+            utils.doc_text_transform,
+            transform=self._text_tokenizer,
+        )
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
             threads=self._threads,
             overwrite=True,
             stemmer="none",
@@ -48,19 +107,112 @@ class Run0CS(Experiment):
             tokeniser="whitespace",
         )
 
-        tokeniser_partial = functools.partial(
-            utils.tokenise, tokeniser=utils.basic_tokeniser
-        )
+        # Set higher maximal term length
+        pt.set_property("max.term.length", "40")
         with multiprocessing.Pool(self._threads) as pool:
             return indexer.index(
-                pool.imap(tokeniser_partial, documents), fields=["text"]
+                pool.imap(self._doc_tokenizer, documents), fields=["text"]
             )
 
     def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
-        retrieve = pt.BatchRetrieve(index_ref, {"wmmodel": "TF_IDF"}) % 1000
+        retrieve = pt.BatchRetrieve(index_ref, wmodel=self._weighting_model) % 1000
         retrieve = pt.apply.query(utils.sanitize_query) >> retrieve
         retrieve = (
-            pt.apply.query(lambda row: utils.basic_tokeniser(row.query)) >> retrieve
+            pt.apply.query(lambda row: self._text_tokenizer(row.query)) >> retrieve
         )
 
         return retrieve.transform(topics)
+
+
+# -------------------------------------------------------------------------------------
+#                               STOPWORDS BEFORE STEMMING
+# -------------------------------------------------------------------------------------
+
+
+class Run0PyTerrierStopEN(Run0PyTerrierTok):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-pyterrier-stop_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="none",
+            stopwords="english" if self._lan == LAN.EN else "none",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
+        )
+
+        return indexer.index(documents)
+
+
+class Run0NltkStopEN(Run0PyTerrierStopEN):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-nltk-stop_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+        if self._lan == LAN.EN:
+            pt.set_property("stopwords.filename", "nltk_stopwords_en.txt")
+
+
+class Run0KaggleStopCS(Run0PyTerrierStopEN):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-kaggle-stop_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+        if self._lan == LAN.CS:
+            pt.set_property("stopwords.filename", "kaggle_stopwords_cs.txt")
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="none",
+            stopwords="english" if self._lan == LAN.CS else "none",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
+        )
+
+        return indexer.index(documents)
+
+
+# -------------------------------------------------------------------------------------
+#                               STEMMING AND LEMMATIZATION
+# -------------------------------------------------------------------------------------
+
+
+class Run0PorterStem(Run0KaggleStopCS):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-porter-stemm_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="porter",
+            stopwords="english" if self._lan == LAN.CS else "none",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
+        )
+
+        return indexer.index(documents)
+
+
+class Run0SnowballStem(Run0KaggleStopCS):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-snowball-stemm_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="EnglishSnowballStemmer",
+            stopwords="english" if self._lan == LAN.CS else "none",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
+        )
+
+        return indexer.index(documents)

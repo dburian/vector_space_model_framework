@@ -12,16 +12,24 @@ Results = pd.DataFrame
 
 
 class LAN(Enum):
-    EN = 1
-    CS = 2
+    EN = "en"
+    CS = "cs"
 
 
 class Experiment:
-    def __init__(self, *, lan: LAN, threads: Optional[int] = None) -> None:
+    def __init__(
+        self, *, index_dir: str, lan: LAN, threads: Optional[int] = None
+    ) -> None:
         self._threads = threads if threads is not None else (os.cpu_count() // 2)
         self._lan = lan
+        cwd = os.path.abspath(".")
+        self._index_path = os.path.join(cwd, "indices", index_dir)
 
-    def get_index(self, index_path: str, documents: Documents) -> IndexRef:
+    @property
+    def index_path(self) -> str:
+        return self._index_path
+
+    def get_index(self, documents: Documents) -> IndexRef:
         raise NotImplementedError()
 
     def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:

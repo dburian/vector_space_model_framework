@@ -12,22 +12,21 @@ def run_experiment(
     experiment: Experiment,
     documents: Documents,
     topics: Topics,
-    index_path: str,
     results_path: str,
 ) -> None:
     logging.info("Running experiment %s.", run_id)
     index_ref = None
-    if os.path.exists(index_path):
-        index_creation_time = os.path.getctime(index_path)
+    if os.path.exists(experiment.index_path):
+        index_creation_time = os.path.getctime(experiment.index_path)
         logging.info(
             "Index read loaded from disk at %s from %s.",
-            index_path,
+            experiment.index_path,
             time.strftime("%Y %d.%M. %H:%M:%S", time.gmtime(index_creation_time)),
         )
-        index_ref = pt.IndexRef.of(index_path)
+        index_ref = pt.IndexRef.of(experiment.index_path)
     else:
         logging.info("Indexing...")
-        index_ref = experiment.get_index(index_path, documents)
+        index_ref = experiment.get_index(documents)
         logging.info("Done")
 
     logging.info("Getting results...")

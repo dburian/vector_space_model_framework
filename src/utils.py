@@ -3,10 +3,11 @@ import re
 from typing import Callable, Iterator
 
 import bs4
+import nltk
 import pandas as pd
 
 SEPS = r"-,.:;?! \n\t\[\]\(\)'\""
-QUERY_MARKS = r"-#\{\}\(\)\^\+:~/"
+QUERY_MARKS = r"-#\{\}\(\)\^\+:~/\'\""
 
 
 def paths_gen(docs_paths_file: str, docs_paths_prefix: str) -> Iterator[str]:
@@ -22,15 +23,22 @@ def take(iter_: Iterator, max_len=100) -> Iterator:
             break
 
 
-def tokenise(doc: dict[str, str], tokeniser: Callable[[str], str]) -> dict[str, str]:
-    doc["text"] = tokeniser(doc["text"])
+def doc_text_transform(
+    doc: dict[str, str], transform: Callable[[str], str]
+) -> dict[str, str]:
+    doc["text"] = transform(doc["text"])
     return doc
 
 
-def basic_tokeniser(text: str) -> str:
+def basic_tokenizer(text: str) -> str:
     """Splits text by ',.:;?! \n\t[]()'"' and joins it by space."""
     words = re.split("[" + SEPS + "]", text)
     return " ".join(words)
+
+
+def nlkt_tokenizer(text: str, language: str = "english") -> str:
+    tokens = nltk.word_tokenize(text, language=language)
+    return " ".join(tokens)
 
 
 def read_topics(
