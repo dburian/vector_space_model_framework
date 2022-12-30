@@ -1,9 +1,9 @@
 import argparse
-import importlib
 import logging
 import os
 import sys
 
+import jnius_config
 import pyterrier as pt
 
 from src import run, types, utils
@@ -47,8 +47,28 @@ parser.add_argument(
         "Number of threads to use. Default is to use half of the available processors."
     ),
 )
+parser.add_argument(
+    "--slopes",
+    type=float,
+    default=[],
+    nargs="+",
+    action="extend",
+    help="Slopes for which to run experiments fot Pivoted unique normalization.",
+)
+parser.add_argument(
+    "--qrels",
+    type=str,
+    default=None,
+    help="Qrels for given topics and document set. Required with '--slopes'.",
+)
+parser.add_argument(
+    "--pivoted_wmodel",
+    type=str,
+    default=None,
+    help="Java class to perform pivoted weighting for slopes experimentation.",
+)
 
-AVAILABLE_RUNS: dict[str, types.Experiment] = {
+AVAILABLE_RUNS = {
     "run-0_en": run_0.Run0,
     "run-0_cs": run_0.Run0,
     "run-0-tfidf_en": run_0.Run0TfIdf,
@@ -64,6 +84,12 @@ AVAILABLE_RUNS: dict[str, types.Experiment] = {
     "run-0-porter-stemm_cs": run_0.Run0PorterStem,
     "run-0-snowball-stemm_en": run_0.Run0SnowballStem,
     "run-0-snowball-stemm_cs": run_0.Run0SnowballStem,
+    "run-0-udpipe-lemm_en": run_0.Run0UDPipeLemm,
+    "run-0-udpipe-lemm_cs": run_0.Run0UDPipeLemm,
+    "run-0-tfidf-pivoted_python_en": run_0.Run0TfIdfPivotedPython,
+    "run-0-tfidf-pivoted_python_cs": run_0.Run0TfIdfPivotedPython,
+    "run-0-tfidf-pivoted_en": run_0.Run0TfIdfPivoted,
+    "run-0-tfidf-pivoted_cs": run_0.Run0TfIdfPivoted,
 }
 
 
@@ -80,10 +106,16 @@ def main(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
+    cwd = os.path.abspath(".")
+
+    # Adding my java code before jnius starts
+    jnius_config.add_classpath(
+        os.path.join(cwd, "java", "ir", "target", "ir-1.0-SNAPSHOT.jar")
+    )
+
     if not pt.started():
         pt.init(tqdm="tqdm")
 
-    cwd = os.path.abspath(".")
     pt.set_property("terrier.home", os.path.join(cwd, "pyterrier_home"))
 
     doc_dir = args.documents[: args.documents.rfind(".")]
@@ -96,6 +128,33 @@ def main(args: argparse.Namespace) -> None:
 
     logging.info("Loading topics from %s.", args.queries)
     topics = utils.read_topics(args.queries, experiment.get_query_parser())
+
+    if len(args.slopes) > 0:
+        if args.qrels is None:
+            logging.error(
+                "Qrels must be specified for Pivoted unique normalization slope"
+                " experiments."
+            )
+            sys.exit(1)
+
+        if args.pivoted_wmodel is None:
+            logging.error(
+                "Pivoted weight model must be specified for Pivoted unique"
+                " normalization slope experiments."
+            )
+            sys.exit(1)
+
+        qrels = pt.io.read_qrels(args.qrels)
+        run.run_tfidf_pivoted_slope_experiment(
+            args.slopes,
+            experiment,
+            documents,
+            topics,
+            qrels,
+            args.output,
+            args.pivoted_wmodel,
+        )
+        sys.exit(0)
 
     run.run_experiment(args.run, experiment, documents, topics, args.output)
 

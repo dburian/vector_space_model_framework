@@ -7,7 +7,7 @@ import nltk
 import pyterrier as pt
 from nltk import downloader
 
-from src import utils
+from src import udpipe, utils
 from src.types import LAN, Documents, Experiment, IndexRef, Results, Topics
 
 
@@ -156,7 +156,7 @@ class Run0NltkStopEN(Run0PyTerrierStopEN):
             pt.set_property("stopwords.filename", "nltk_stopwords_en.txt")
 
 
-class Run0KaggleStopCS(Run0PyTerrierStopEN):
+class Run0KaggleStopCS(Run0PyTerrierTok):
     def __init__(self, *args, **kwargs) -> None:
         kwargs.setdefault("index_dir", f"run-0-kaggle-stop_{kwargs['lan'].value}")
         super().__init__(*args, **kwargs)
@@ -216,3 +216,81 @@ class Run0SnowballStem(Run0KaggleStopCS):
         )
 
         return indexer.index(documents)
+
+
+class Run0UDPipeLemm(Run0TfIdf):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-udpipe-lemm_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="none",
+            stopwords="none",
+            tokeniser="whitespace",
+        )
+
+        lemmatize_docs = functools.partial(udpipe.lemmatize_docs, lan=self._lan)
+
+        # with multiprocessing.Pool(self._threads) as pool:
+        lemmatized_docs = udpipe.unbatchify(
+            map(lemmatize_docs, udpipe.batchify(documents, 2))
+        )
+        return indexer.index(lemmatized_docs)
+
+    def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
+        retriever = pt.BatchRetrieve(index_ref, wmodel=self._weighting_model) % 1000
+        retriever = pt.apply.query(utils.sanitize_query) >> retriever
+
+        lemmatized_topics = udpipe.lemmatize_topics(topics, self._lan)
+
+        return retriever.transform(lemmatized_topics)
+
+
+# -------------------------------------------------------------------------------------
+#                               WEIGHTING SCHEMES
+# -------------------------------------------------------------------------------------
+
+
+# TODO: Rewrite these with single base class and self._wmodel
+class Run0TfIdfPivotedPython(Run0SnowballStem):
+    def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
+        pivoted_tfidf = pt.autoclass(
+            "org.terrier.matching.models.WeightingModelLibrary"
+        )().tf_pivoted
+
+        def my_wmodel(key_freq, posting, entry_stats, collection_stats):
+            return pivoted_tfidf(
+                posting.getFrequency(),
+                0.6,
+                posting.getDocumentLength(),
+                collection_stats.getAverageDocumentLength(),
+            )
+
+        retriever = pt.BatchRetrieve(index_ref, wmodel=my_wmodel) % 1000
+        retriever = pt.apply.query(utils.sanitize_query) >> retriever
+
+        return retriever.transform(topics)
+
+
+class Run0TfIdfPivoted(Run0SnowballStem):
+    def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
+        pivoted_tfidf = pt.autoclass("cz.dburian.TfIdfPivoted")(0.6)
+
+        retriever = pt.BatchRetrieve(index_ref, wmodel=pivoted_tfidf) % 1000
+        retriever = pt.apply.query(utils.sanitize_query) >> retriever
+
+        return retriever.transform(topics)
+
+
+class Run0TfIdfPivoted(Run0SnowballStem):
+    def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
+        pivoted_tfidf = pt.autoclass("cz.dburian.TfIdfRobertsonPivoted")(0.6)
+
+        retriever = pt.BatchRetrieve(index_ref, wmodel=pivoted_tfidf) % 1000
+        retriever = pt.apply.query(utils.sanitize_query) >> retriever
+
+        return retriever.transform(topics)

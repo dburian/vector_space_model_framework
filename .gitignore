@@ -4,4 +4,6 @@ results/**
 evals/**
 indices/**
 
+java/ir/target/**
+
 __pycache__

@@ -5,7 +5,9 @@ from typing import Any, Callable, Iterable, Optional
 import bs4
 import pandas as pd
 
-Documents = Iterable[dict[str, str]]
+QRels = pd.DataFrame
+Document = dict[str, str]
+Documents = Iterable[Document]
 Topics = pd.DataFrame
 IndexRef = Any
 Results = pd.DataFrame
