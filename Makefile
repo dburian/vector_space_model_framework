@@ -31,3 +31,10 @@ run-rm:
 	rm $(RES_DIR)/$(run)_test_en.res $(RES_DIR)/$(run)_train_en.res
 	rm $(RES_DIR)/$(run)_test_cs.res $(RES_DIR)/$(run)_train_cs.res
 
+slopes:
+	python main.py -q A1/topics-train_$(lan).xml -d A1/documents_$(lan).lst -o supplementary/$(run)_slopes_$(lan).csv --slopes 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 --run $(run)_$(lan) --qrels A1/qrels-train_$(lan).txt --pivoted_wmodel cz.dburian.TfIdfLengthPivoted
+	python main.py -q A1/topics-train_$(lan).xml -d A1/documents_$(lan).lst -o supplementary/$(run)_robertson_slopes_$(lan).csv --slopes 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 --run $(run)_$(lan) --qrels A1/qrels-train_$(lan).txt --pivoted_wmodel cz.dburian.TfIdfRobertsonPivoted
+
+
+submission:
+

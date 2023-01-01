@@ -20,7 +20,12 @@ class LAN(Enum):
 
 class Experiment:
     def __init__(
-        self, *, index_dir: str, lan: LAN, threads: Optional[int] = None
+        self,
+        *,
+        index_dir: str,
+        lan: LAN,
+        threads: Optional[int] = None,
+        **_,
     ) -> None:
         self._threads = threads if threads is not None else (os.cpu_count() // 2)
         self._lan = lan

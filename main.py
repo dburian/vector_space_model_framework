@@ -67,6 +67,12 @@ parser.add_argument(
     default=None,
     help="Java class to perform pivoted weighting for slopes experimentation.",
 )
+parser.add_argument(
+    "--udpipe_service_url",
+    type=str,
+    default="http://127.0.0.1:6666",
+    help="Url to UDPipe2 service.",
+)
 
 AVAILABLE_RUNS = {
     "run-0_en": run_0.Run0,
@@ -86,6 +92,8 @@ AVAILABLE_RUNS = {
     "run-0-snowball-stemm_cs": run_0.Run0SnowballStem,
     "run-0-udpipe-lemm_en": run_0.Run0UDPipeLemm,
     "run-0-udpipe-lemm_cs": run_0.Run0UDPipeLemm,
+    "run-0-czech-stem_cs": run_0.Run0CzechStemmer,
+    "run-0-czech-stem_en": run_0.Run0CzechStemmer,
     "run-0-tfidf-pivoted_python_en": run_0.Run0TfIdfPivotedPython,
     "run-0-tfidf-pivoted_python_cs": run_0.Run0TfIdfPivotedPython,
     "run-0-tfidf-pivoted_en": run_0.Run0TfIdfPivoted,
@@ -124,7 +132,11 @@ def main(args: argparse.Namespace) -> None:
     documents = pt.index.treccollection2textgen(document_paths)
 
     lan = types.LAN.EN if args.run.endswith("_en") else types.LAN.CS
-    experiment = AVAILABLE_RUNS[args.run](threads=args.threads, lan=lan)
+    experiment = AVAILABLE_RUNS[args.run](
+        udpipe_service=args.udpipe_service_url,
+        threads=args.threads,
+        lan=lan,
+    )
 
     logging.info("Loading topics from %s.", args.queries)
     topics = utils.read_topics(args.queries, experiment.get_query_parser())

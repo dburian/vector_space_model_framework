@@ -218,9 +218,28 @@ class Run0SnowballStem(Run0KaggleStopCS):
         return indexer.index(documents)
 
 
-class Run0UDPipeLemm(Run0TfIdf):
+class Run0CzechStemmer(Run0KaggleStopCS):
     def __init__(self, *args, **kwargs) -> None:
-        kwargs.setdefault("index_dir", f"run-0-udpipe-lemm_{kwargs['lan'].value}")
+        kwargs.setdefault("index_dir", f"run-0-czech-stem_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="cz.dburian.CzechStemmerLight",
+            stopwords="english" if self._lan == LAN.CS else "none",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
+        )
+
+        return indexer.index(documents)
+
+
+class Run0UDPipeLemm(Run0TfIdf):
+    def __init__(self, *args, udpipe_service, **kwargs) -> None:
+        self._udpipe_service = udpipe_service
+        kwargs.setdefault("index_dir", f"run-0-udpipe-lemm-local_{kwargs['lan'].value}")
         super().__init__(*args, **kwargs)
 
     def get_index(self, documents: Documents) -> IndexRef:
@@ -233,11 +252,15 @@ class Run0UDPipeLemm(Run0TfIdf):
             tokeniser="whitespace",
         )
 
-        lemmatize_docs = functools.partial(udpipe.lemmatize_docs, lan=self._lan)
+        lemmatize_docs = functools.partial(
+            udpipe.lemmatize_docs,
+            lan=self._lan,
+            udpipe_service=self._udpipe_service,
+        )
 
         # with multiprocessing.Pool(self._threads) as pool:
         lemmatized_docs = udpipe.unbatchify(
-            map(lemmatize_docs, udpipe.batchify(documents, 2))
+            map(lemmatize_docs, udpipe.batchify(documents, 500))
         )
         return indexer.index(lemmatized_docs)
 
@@ -245,7 +268,11 @@ class Run0UDPipeLemm(Run0TfIdf):
         retriever = pt.BatchRetrieve(index_ref, wmodel=self._weighting_model) % 1000
         retriever = pt.apply.query(utils.sanitize_query) >> retriever
 
-        lemmatized_topics = udpipe.lemmatize_topics(topics, self._lan)
+        lemmatized_topics = udpipe.lemmatize_topics(
+            topics,
+            self._lan,
+            udpipe_service=self._udpipe_service,
+        )
 
         return retriever.transform(lemmatized_topics)
 
@@ -255,9 +282,17 @@ class Run0UDPipeLemm(Run0TfIdf):
 # -------------------------------------------------------------------------------------
 
 
-# TODO: Rewrite these with single base class and self._wmodel
-class Run0TfIdfPivotedPython(Run0SnowballStem):
+class Run0WeightingModel(Run0SnowballStem):
     def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
+        retriever = pt.BatchRetrieve(index_ref, wmodel=self._wmodel) % 1000
+        retriever = pt.apply.query(utils.sanitize_query) >> retriever
+
+        return retriever.transform(topics)
+
+
+class Run0TfIdfPivotedPython(Run0WeightingModel):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         pivoted_tfidf = pt.autoclass(
             "org.terrier.matching.models.WeightingModelLibrary"
         )().tf_pivoted
@@ -270,27 +305,18 @@ class Run0TfIdfPivotedPython(Run0SnowballStem):
                 collection_stats.getAverageDocumentLength(),
             )
 
-        retriever = pt.BatchRetrieve(index_ref, wmodel=my_wmodel) % 1000
-        retriever = pt.apply.query(utils.sanitize_query) >> retriever
-
-        return retriever.transform(topics)
+        self._wmodel = my_wmodel
 
 
-class Run0TfIdfPivoted(Run0SnowballStem):
-    def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
-        pivoted_tfidf = pt.autoclass("cz.dburian.TfIdfPivoted")(0.6)
+class Run0TfIdfPivoted(Run0WeightingModel):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
-        retriever = pt.BatchRetrieve(index_ref, wmodel=pivoted_tfidf) % 1000
-        retriever = pt.apply.query(utils.sanitize_query) >> retriever
-
-        return retriever.transform(topics)
+        self._wmodel = pt.autoclass("cz.dburian.TfIdfLengthPivoted")(0.6)
 
 
-class Run0TfIdfPivoted(Run0SnowballStem):
-    def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
-        pivoted_tfidf = pt.autoclass("cz.dburian.TfIdfRobertsonPivoted")(0.6)
+class Run0TfIdfRobertsonPivoted(Run0SnowballStem):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
-        retriever = pt.BatchRetrieve(index_ref, wmodel=pivoted_tfidf) % 1000
-        retriever = pt.apply.query(utils.sanitize_query) >> retriever
-
-        return retriever.transform(topics)
+        self._wmodel = pt.autoclass("cz.dburian.TfIdfRobertsonPivoted")(0.6)

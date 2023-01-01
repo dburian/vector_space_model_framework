@@ -3,7 +3,6 @@ import email.mime.nonmultipart
 import email.policy
 import json
 import logging
-import sys
 import urllib.error
 import urllib.request
 from typing import Iterable
@@ -43,23 +42,22 @@ def _perform_request(*, params, server=UD_PIPE_SERVICE, method="process"):
         ) as request:
             return json.loads(request.read())
     except urllib.error.HTTPError as err:
-        print(
+        logging.error(
             "An exception was raised during UDPipe 'process' REST request.\n"
             "The service returned the following error:\n"
-            f"  {err.fp.read().decode('utf-8')}",
-            file=sys.stderr,
+            "  %s",
+            err.fp.read().decode("utf-8"),
         )
         raise
     except json.JSONDecodeError as err:
-        print(
-            "Cannot parse the JSON response of UDPipe 'process' REST request.\n"
-            f"  {err.msg}",
-            file=sys.stderr,
+        logging.error(
+            "Cannot parse the JSON response of UDPipe 'process' REST request.\n  %s",
+            err.msg,
         )
         raise
 
 
-def _lemmatize_list(texts: list[str], lan: LAN) -> list[str]:
+def _lemmatize_list(texts: list[str], lan: LAN, udpipe_service) -> list[str]:
     text_data = ""
     for text in texts:
         text_data += text
@@ -73,7 +71,13 @@ def _lemmatize_list(texts: list[str], lan: LAN) -> list[str]:
         "tagger": "",
         "data": text_data.rstrip(),
     }
-    response = _perform_request(params=params)
+    logging.info(
+        "Lemmatizing %s texts with UDPipe at %s...", len(texts), udpipe_service
+    )
+    response = _perform_request(params=params, server=udpipe_service)
+    logging.info(
+        "Lemmatizing %s texts with UDPipe at %s...Done", len(texts), udpipe_service
+    )
     parsed_texts = []
     for parsed_text in conllu.parse(response["result"]):
         lemmas = [token["lemma"] for token in parsed_text]
@@ -82,23 +86,21 @@ def _lemmatize_list(texts: list[str], lan: LAN) -> list[str]:
     return parsed_texts
 
 
-def lemmatize_docs(docs: list[Document], lan: LAN) -> list[Document]:
+def lemmatize_docs(
+    docs: list[Document], lan: LAN, udpipe_service: str
+) -> list[Document]:
     texts = [doc["text"] for doc in docs]
 
-    logging.info("Lemmatizing %s docs with UDPipe...", len(docs))
-    parsed_docs = _lemmatize_list(texts, lan)
-    logging.info("Lemmatizing %s docs with UDPipe...Done", len(docs))
+    parsed_docs = _lemmatize_list(texts, lan, udpipe_service)
     for doc, parsed_doc in zip(docs, parsed_docs):
         doc["text"] = parsed_doc
 
     return docs
 
 
-def lemmatize_topics(topics: Topics, lan: LAN) -> Topics:
+def lemmatize_topics(topics: Topics, lan: LAN, udpipe_service) -> Topics:
     queries = list(topics["query"])
-    logging.info("Lemmatizing %s queries with UDPipe...", len(topics))
-    parsed_topics = _lemmatize_list(queries, lan)
-    logging.info("Lemmatizing %s queries with UDPipe...Done", len(topics))
+    parsed_topics = _lemmatize_list(queries, lan, udpipe_service)
 
     topics["query"] = parsed_topics
     return topics
