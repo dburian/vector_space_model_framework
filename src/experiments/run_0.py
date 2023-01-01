@@ -239,7 +239,7 @@ class Run0CzechStemmer(Run0KaggleStopCS):
 class Run0UDPipeLemm(Run0TfIdf):
     def __init__(self, *args, udpipe_service, **kwargs) -> None:
         self._udpipe_service = udpipe_service
-        kwargs.setdefault("index_dir", f"run-0-udpipe-lemm-local_{kwargs['lan'].value}")
+        kwargs.setdefault("index_dir", f"run-0-udpipe-lemm_{kwargs['lan'].value}")
         super().__init__(*args, **kwargs)
 
     def get_index(self, documents: Documents) -> IndexRef:
@@ -249,20 +249,17 @@ class Run0UDPipeLemm(Run0TfIdf):
             overwrite=True,
             stemmer="none",
             stopwords="none",
-            tokeniser="whitespace",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
         )
 
         lemmatize_docs = functools.partial(
-            udpipe.lemmatize_docs,
+            udpipe.lemmatize_doc,
             lan=self._lan,
             udpipe_service=self._udpipe_service,
         )
 
         # with multiprocessing.Pool(self._threads) as pool:
-        lemmatized_docs = udpipe.unbatchify(
-            map(lemmatize_docs, udpipe.batchify(documents, 500))
-        )
-        return indexer.index(lemmatized_docs)
+        return indexer.index(map(lemmatize_docs, documents))
 
     def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
         retriever = pt.BatchRetrieve(index_ref, wmodel=self._weighting_model) % 1000

@@ -129,7 +129,9 @@ def main(args: argparse.Namespace) -> None:
     doc_dir = args.documents[: args.documents.rfind(".")]
     logging.info("Loading documents from %s.", doc_dir)
     document_paths = list(utils.paths_gen(args.documents, doc_dir))
-    documents = pt.index.treccollection2textgen(document_paths)
+    documents = pt.index.treccollection2textgen(
+        document_paths, tag_text_length=4096 * 2
+    )
 
     lan = types.LAN.EN if args.run.endswith("_en") else types.LAN.CS
     experiment = AVAILABLE_RUNS[args.run](

@@ -3,6 +3,7 @@ import email.mime.nonmultipart
 import email.policy
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
 from typing import Iterable
@@ -57,50 +58,47 @@ def _perform_request(*, params, server=UD_PIPE_SERVICE, method="process"):
         raise
 
 
-def _lemmatize_list(texts: list[str], lan: LAN, udpipe_service) -> list[str]:
-    text_data = ""
-    for text in texts:
-        text_data += text
-        text_data += "\n\n"
-
+def _lemmatize_text(text: str, lan: LAN, udpipe_service) -> str:
     params = {
-        "input": "horizontal",
+        "input": "",
         "output": "conllu",
         "model": "czech" if lan == LAN.CS else "english",
         "tokenizer": "",
         "tagger": "",
-        "data": text_data.rstrip(),
+        "data": text,
     }
-    logging.info(
-        "Lemmatizing %s texts with UDPipe at %s...", len(texts), udpipe_service
-    )
+    logging.info("Lemmatizing %s texts with UDPipe at %s...", len(text), udpipe_service)
     response = _perform_request(params=params, server=udpipe_service)
     logging.info(
-        "Lemmatizing %s texts with UDPipe at %s...Done", len(texts), udpipe_service
+        "Lemmatizing %s texts with UDPipe at %s...Done", len(text), udpipe_service
     )
-    parsed_texts = []
+    print(response["result"])
+    parsed_texts = ""
     for parsed_text in conllu.parse(response["result"]):
         lemmas = [token["lemma"] for token in parsed_text]
-        parsed_texts.append(" ".join(lemmas))
+        parsed_texts += " ".join(lemmas)
 
     return parsed_texts
 
 
-def lemmatize_docs(
-    docs: list[Document], lan: LAN, udpipe_service: str
-) -> list[Document]:
-    texts = [doc["text"] for doc in docs]
+STRIPED_CHARS = r"\n,.;:\"\'\t"
 
-    parsed_docs = _lemmatize_list(texts, lan, udpipe_service)
-    for doc, parsed_doc in zip(docs, parsed_docs):
-        doc["text"] = parsed_doc
 
-    return docs
+def sanitize_text(text: str) -> str:
+    words = re.split("[" + STRIPED_CHARS + "]", text)
+    return " ".join(words)
+
+
+def lemmatize_doc(doc: Document, lan: LAN, udpipe_service: str) -> Document:
+    doc["text"] = _lemmatize_text(doc["text"], lan, udpipe_service)
+    return doc
 
 
 def lemmatize_topics(topics: Topics, lan: LAN, udpipe_service) -> Topics:
     queries = list(topics["query"])
-    parsed_topics = _lemmatize_list(queries, lan, udpipe_service)
+    parsed_topics = []
+    for query in queries:
+        parsed_topics.append(_lemmatize_text(query, lan, udpipe_service))
 
     topics["query"] = parsed_topics
     return topics
