@@ -228,7 +228,7 @@ class Run0CzechStemmer(Run0KaggleStopCS):
             self._index_path,
             threads=self._threads,
             overwrite=True,
-            stemmer="cz.dburian.CzechStemmerLight",
+            stemmer="cz.dburian.ir.terrier.CzechStemmerLight",
             stopwords="english" if self._lan == LAN.CS else "none",
             tokeniser="english" if self._lan == LAN.EN else "utf",
         )
@@ -279,7 +279,26 @@ class Run0UDPipeLemm(Run0TfIdf):
 # -------------------------------------------------------------------------------------
 
 
-class Run0WeightingModel(Run0SnowballStem):
+class Run0WeightingModel(Run0KaggleStopCS):
+    def __init__(self, *args, **kwargs) -> None:
+        kwargs.setdefault("index_dir", f"run-0-wmodel_{kwargs['lan'].value}")
+        super().__init__(*args, **kwargs)
+        self._wmodel = "TF_IDF"
+
+    def get_index(self, documents: Documents) -> IndexRef:
+        indexer = pt.IterDictIndexer(
+            self._index_path,
+            threads=self._threads,
+            overwrite=True,
+            stemmer="cz.dburian.ir.terrier.CzechStemmerLight"
+            if self._lan == LAN.CS
+            else "EnglishSnowballStemmer",
+            stopwords="english" if self._lan == LAN.CS else "none",
+            tokeniser="english" if self._lan == LAN.EN else "utf",
+        )
+
+        return indexer.index(documents)
+
     def get_results(self, index_ref: IndexRef, topics: Topics) -> Results:
         retriever = pt.BatchRetrieve(index_ref, wmodel=self._wmodel) % 1000
         retriever = pt.apply.query(utils.sanitize_query) >> retriever
@@ -309,11 +328,35 @@ class Run0TfIdfPivoted(Run0WeightingModel):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self._wmodel = pt.autoclass("cz.dburian.TfIdfLengthPivoted")(0.6)
+        self._wmodel = pt.autoclass("cz.dburian.ir.terrier.TfIdfLengthPivoted")(0.3)
 
 
-class Run0TfIdfRobertsonPivoted(Run0SnowballStem):
+class Run0TfIdfRobertsonPivoted(Run0WeightingModel):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self._wmodel = pt.autoclass("cz.dburian.TfIdfRobertsonPivoted")(0.6)
+        slope = 0.2 if self._lan == LAN.CS else 0.3
+        self._wmodel = pt.autoclass("cz.dburian.ir.terrier.TfIdfRobertsonPivoted")(
+            slope
+        )
+
+
+class Run0BM25(Run0WeightingModel):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self._wmodel = "BM25"
+
+
+class Run0PL2(Run0WeightingModel):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self._wmodel = "PL2"
+
+
+class Run0LemurTfIdf(Run0WeightingModel):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        self._wmodel = "LemurTF_IDF"

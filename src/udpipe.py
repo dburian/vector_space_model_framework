@@ -72,7 +72,6 @@ def _lemmatize_text(text: str, lan: LAN, udpipe_service) -> str:
     logging.info(
         "Lemmatizing %s texts with UDPipe at %s...Done", len(text), udpipe_service
     )
-    print(response["result"])
     parsed_texts = ""
     for parsed_text in conllu.parse(response["result"]):
         lemmas = [token["lemma"] for token in parsed_text]

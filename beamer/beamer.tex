@@ -1,0 +1,187 @@
+\documentclass{beamer}
+
+\usepackage{graphicx}
+\usepackage[font=tiny]{caption}
+
+\title{Vector Space Models with PyTerrier}
+\author{David Burian}
+\date{\today}
+
+\newcommand{\RunName}[1]{\textbf{#1}}
+\let\Oldinput\input
+\renewcommand{\input}[1]{\resizebox{\textwidth}{!}{\Oldinput{#1}}}
+
+\newcommand{\Run}[5]{
+  \RunName{#1}
+
+  \begin{itemize}
+      \item \emph{tokenizer}: #2
+      \item \emph{stop words}: #3
+      \item \emph{stemmer}: #4
+      \item \emph{weight model}: #5
+  \end{itemize}
+}
+\newcommand{\RunQE}[6]{
+    \RunName{#1}
+
+    \begin{itemize}
+        \item \emph{tokenizer}: #2
+        \item \emph{stop words}: #3
+        \item \emph{stemmer}: #4
+        \item \emph{weight model}: #5
+        \item \emph{query expansion}: #6
+    \end{itemize}
+}
+\newcommand{\RunShort}[2]{
+  \RunName{#1}:
+  \begin{itemize}
+    \item #2
+  \end{itemize}
+}
+\newcommand{\RunResults}[2]{%
+\begin{table}[h]
+\centering
+\input{../supplementary/#1_table.tex}
+    \caption{Results of #2.\label{tbl:#1}}
+\end{table}
+}
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+  \frametitle{Choice of IR framework}
+  \begin{itemize}
+    \item Xapian
+    \item Lucene
+    \item Anserini (Pyserini)
+    \item Solr
+    \item ElasticSearch
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Baselines}
+  \begin{itemize}
+    \item \Run{run-0}{
+    regex tokenizer spliting at any of the following characters
+    \texttt{-,.;;?!\textvisiblespace\string\t\string\n\string[\string]\string(\string)'"}
+}{-}{-}{term frequency}
+
+\item \Run{run-0-tfidf}{
+    regex tokenizer spliting at any of the following characters
+    \texttt{-,.;;?!\textvisiblespace\string\t\string\n\string[\string]\string(\string)'"}
+}{-}{-}{Robertson's TF-IDF}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Baselines results}
+
+\RunResults{baselines}{\RunName{run-0} and \RunName{run-0-tfidf}}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Tokenizers}
+  \begin{itemize}
+    \item \RunShort{run-0-pyterrier-tok}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}
+
+    \item \RunShort{run-0-nltk-tok}{
+    nltk's tokenizers; 'english' for English dataset, 'czech' for Czech dataset}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Tokenizers results}
+\RunResults{tokenizers}{\RunName{run-0-pyterrier-tok} and \RunName{run-0-nltk-tok}}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Stopwords}
+  \begin{itemize}
+    \item \RunShort{run-0-pyterrier-stop}{builtin PyTerrier's stopwords list for English dataset only}
+
+    \item \RunShort{run-0-nltk-stop}{nltk English stopword list}
+    \item \RunShort{run-0-kaggle-stop}{ Kaggle Czech stopword list }
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Stopwords results}
+\RunResults{stopwords}{\RunName{run-0-pyterrier-stop}, \RunName{run-0-nltk-stop}
+and \RunName{run-0-kaggle-stop}}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Stemming{\textbackslash}Lemmatization}
+  \begin{itemize}
+    \item \RunShort{run-0-porter-stemm}{PyTerrier's Porter stemmer}
+    \item \RunShort{run-0-snowball-stemm}{PyTerrier's Snowball stemmer}
+    \item \RunShort{run-0-udpipe-lemm}{Lemmatization using UDPipe 2 with the 'czech' model}
+    \item \RunShort{run-0-czech-stemm}{Czech stemmer implemented by Prof. Jacques Savoy, 'light' version}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Stemming{\textbackslash}Lemmatization results}
+\RunResults{stemmers}{\RunName{run-0-porter-stemm},
+\RunName{run-0-snowball-stem}, \RunName{run-0-udpipe-lemm} and
+\RunName{run-0-czech-stemm}}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Weighting models}
+  \begin{itemize}
+    \item \RunShort{run-0-tfidf-pivoted}{TF-IDF with Pivoted length normalization}
+    \item \RunShort{run-0-tfidf-pivoted-robertson}{TF-IDF with Pivoted Robertson's normalization}
+    \item \RunShort{run-0-bm25}{BM25}
+    \item \RunShort{run-0-pl2}{PL2}
+    \item \RunShort{run-0-lemur-tfidf}{Lemur's version of TF-IDF}
+
+
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Weighting models results}
+
+\RunResults{wmodels}{\RunName{run-0-tfidf-pivoted},
+  \RunName{run-0-tfidf-pivoted-robertson}, \RunName{run-0-bm25},
+\RunName{run-0-pl2} and \RunName{run-0-lemur-tfidf}}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Query expansion}
+  \begin{itemize}
+    \item \RunShort{run-2}{divergence from Randomness query expansion model
+      using PyTerrier's built in 'Bo1' model}
+  \end{itemize}
+
+\RunResults{query_expansion}{\RunName{run-2}}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Best run}
+  \begin{itemize}
+    \item \RunQE{run-2}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{Robertson's TF-IDF}{divergence from Randomness query expansion model using PyTerrier's built in 'Bo1' model}
+  \end{itemize}
+  \RunResults{final}{\RunName{run-0} and \RunName{run-2}}
+\end{frame}
+
+\begin{frame}
+  \centering
+  \Large{Thank you for your attention.}
+\end{frame}
+
+\end{document}
+

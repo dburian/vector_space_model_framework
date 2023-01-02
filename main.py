@@ -7,12 +7,16 @@ import jnius_config
 import pyterrier as pt
 
 from src import run, types, utils
-from src.experiments import run_0
+from src.experiments import run_0, run_1, run_2
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    "-q", "--queries", type=str, help="XML topic file in TREC format.", required=True
+    "-q",
+    "--queries",
+    type=str,
+    help="XML topic file in TREC format.",
+    default=None,
 )
 parser.add_argument(
     "-d",
@@ -22,7 +26,7 @@ parser.add_argument(
         "File containing list of documents, where each path is prepended with given"
         " filename without extension as a containing directory."
     ),
-    required=True,
+    default=None,
 )
 parser.add_argument(
     "-r",
@@ -30,14 +34,13 @@ parser.add_argument(
     type=str,
     default=None,
     help="Identifier of the run/experiment.",
-    required=True,
 )
 parser.add_argument(
     "-o",
     "--output",
     type=str,
     help="Name of the output results file.",
-    required=True,
+    default=None,
 )
 parser.add_argument(
     "--threads",
@@ -73,6 +76,13 @@ parser.add_argument(
     default="http://127.0.0.1:6666",
     help="Url to UDPipe2 service.",
 )
+parser.add_argument(
+    "--list_runs",
+    # type=bool,
+    default=False,
+    action="store_true",
+    help="List available runs.",
+)
 
 AVAILABLE_RUNS = {
     "run-0_en": run_0.Run0,
@@ -92,12 +102,24 @@ AVAILABLE_RUNS = {
     "run-0-snowball-stemm_cs": run_0.Run0SnowballStem,
     "run-0-udpipe-lemm_en": run_0.Run0UDPipeLemm,
     "run-0-udpipe-lemm_cs": run_0.Run0UDPipeLemm,
-    "run-0-czech-stem_cs": run_0.Run0CzechStemmer,
-    "run-0-czech-stem_en": run_0.Run0CzechStemmer,
+    "run-0-czech-stemm_cs": run_0.Run0CzechStemmer,
+    "run-0-czech-stemm_en": run_0.Run0CzechStemmer,
     "run-0-tfidf-pivoted_python_en": run_0.Run0TfIdfPivotedPython,
     "run-0-tfidf-pivoted_python_cs": run_0.Run0TfIdfPivotedPython,
     "run-0-tfidf-pivoted_en": run_0.Run0TfIdfPivoted,
     "run-0-tfidf-pivoted_cs": run_0.Run0TfIdfPivoted,
+    "run-0-tfidf-pivoted-robertson_en": run_0.Run0TfIdfRobertsonPivoted,
+    "run-0-tfidf-pivoted-robertson_cs": run_0.Run0TfIdfRobertsonPivoted,
+    "run-0-bm25_cs": run_0.Run0BM25,
+    "run-0-bm25_en": run_0.Run0BM25,
+    "run-0-pl2_cs": run_0.Run0PL2,
+    "run-0-pl2_en": run_0.Run0PL2,
+    "run-0-lemur-tfidf_cs": run_0.Run0LemurTfIdf,
+    "run-0-lemur-tfidf_en": run_0.Run0LemurTfIdf,
+    "run-1_cs": run_1.Run1,
+    "run-1_en": run_1.Run1,
+    "run-2_cs": run_2.Run2,
+    "run-2_en": run_2.Run2,
 }
 
 
@@ -106,19 +128,31 @@ def main(args: argparse.Namespace) -> None:
         format="%(asctime)s : [%(levelname)s] %(message)s", level=logging.INFO
     )
 
-    if args.run not in AVAILABLE_RUNS:
-        logging.error(
-            "Run %s is not available. Choose one of %s.",
-            args.run,
-            AVAILABLE_RUNS.keys(),
-        )
+    if args.list_runs:
+        print("\n".join(AVAILABLE_RUNS.keys()))
+        sys.exit(0)
+
+    if args.run is None or args.run not in AVAILABLE_RUNS:
+        logging.error("Specify one of available runs.")
+        sys.exit(1)
+
+    if args.queries is None:
+        logging.error("Specify queries to search for.")
+        sys.exit(1)
+
+    if args.documents is None:
+        logging.error("Specify documents to index.")
+        sys.exit(1)
+
+    if args.output is None:
+        logging.error("Specify output file.")
         sys.exit(1)
 
     cwd = os.path.abspath(".")
 
     # Adding my java code before jnius starts
     jnius_config.add_classpath(
-        os.path.join(cwd, "java", "ir", "target", "ir-1.0-SNAPSHOT.jar")
+        os.path.join(cwd, "java", "terrier_ir", "target", "terrier_ir-1.0.jar")
     )
 
     if not pt.started():

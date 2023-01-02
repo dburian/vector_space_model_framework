@@ -1,0 +1,360 @@
+\documentclass[10pt]{article}
+
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{parskip}
+\usepackage{natbib}
+\usepackage{xcolor}
+\usepackage{url}
+
+\geometry{a4paper, left=1.5cm, right=1.5cm, top=1.5cm, bottom=1.5cm}
+
+\bibliographystyle{plainnat}    %% Author (year)
+
+\author{David Burian}
+\date{\today}
+\title{Vector Space Model with PyTerrier}
+
+
+\newcommand{\RunName}[1]{\textbf{#1}}
+\newcommand{\Run}[6]{
+\begin{samepage}
+    \paragraph{\RunName{#1}} #6
+
+    \begin{itemize}
+        \item \emph{tokenizer}: #2
+        \item \emph{stop words}: #3
+        \item \emph{stemmer}: #4
+        \item \emph{weight model}: #5
+    \end{itemize}
+\end{samepage}
+}
+\newcommand{\RunQE}[7]{
+\begin{samepage}
+    \paragraph{\RunName{#1}} #7
+
+    \begin{itemize}
+        \item \emph{tokenizer}: #2
+        \item \emph{stop words}: #3
+        \item \emph{stemmer}: #4
+        \item \emph{weight model}: #5
+        \item \emph{query expansion}: #6
+    \end{itemize}
+\end{samepage}
+}
+
+\newcommand{\RunResults}[2]{%
+\begin{table}[h]
+\centering
+\input{../supplementary/#1_table.tex}
+    \caption{Results of #2.\label{tbl:#1}}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{../supplementary/#1_graph.png}
+    \caption{Precision and 11-point interpolated precision-recall curves for
+    #2.\label{fig:#1}}
+\end{figure}
+}
+
+\begin{document}
+\maketitle
+
+\section{Introduction and choice of the framework}
+
+My IR system is implemented with
+PyTerrier\footnote{\url{https://github.com/terrier-org/pyterrier}}, which is a
+python interface to a java IR system called
+Terrier\footnote{\url{https://github.com/terrier-org/terrier-core}}.
+
+Apart from PyTerrier, I've considered also other IR frameworks. Here I briefly
+discuss why I've decided to use PyTerrier. I've looked at the following systems
+sorted according to my preference in decreasing order:
+
+\begin{itemize}
+    \item Xapian\footnote{\url{https://xapian.org}} -- C++ IR system with
+        bindings to python with good documentation. The only drawback I was
+        afraid of was that I would have to write much more code than with PyTerrier.
+    \item Lucene\footnote{\url{https://lucene.apache.org}} -- Popular and
+        largely used Java IR end-to-end system. I trust this would be the number
+        one choice for developing large IR system. The only two drawbacks from
+        my point of view were the language used and having to deal with
+        complexities around the deployment of such system, which was not really
+        the focus of this assignment.
+    \item Anserini\footnote{\url{https://github.com/castorini/anserini}} -- Java
+        IR built with Lucene with a python interface called Pyserini. Both look
+        like well built projects, though lacking documentation.
+    \item Solr\footnote{\url{https://solr.apache.org}},
+        ElasticSearch\footnote{\url{https://www.elastic.co/elasticsearch/}} --
+        These are complete IR deployment-ready systems that are built on top of
+        Lucene. Both offer high-level features and require minimal
+        configuration. Because of this these systems are in my opinion the wrong
+        choice for this assignment, where we require high configurability and do
+        not concern ourselves with deployment and user interface.
+\end{itemize}
+
+To sum up I chose PyTerrier because of:
+
+\begin{itemize}
+    \item good documentation,
+    \item trusted and large enough project, which did the heavy lifting (Terrier),
+    \item good balance of the amount of configurability and amount of code
+        needed to get fully functional system,
+    \item an existence of python interface.
+\end{itemize}
+
+\section{Experiments}
+
+I have carried out 34 experiments which I will describe in the following
+paragraphs. I've split the experiments into sections, where each section is
+focused on a particular aspect of an IR system. At the end of each section I
+will include the experiments' results on the training topics.
+
+\subsection{Baselines}
+
+\Run{run-0}{
+    regex tokenizer spliting at any of the following characters
+    \texttt{-,.;;?!\textvisiblespace\string\t\string\n\string[\string]\string(\string)'"}
+}{-}{-}{term frequency}{Baseline implemented according to the assignment instructions.}
+
+\Run{run-0-tfidf}{
+    regex tokenizer spliting at any of the following characters
+    \texttt{-,.;;?!\textvisiblespace\string\t\string\n\string[\string]\string(\string)'"}
+}{-}{-}{Robertson's TF-IDF}{Improved baseline. I wanted a more robust weighting
+model before tinkering with indexation. Do note that the TF-IDF used is not pure
+TF-IDF. But a version given in \cite{jonesTFIDF} with Robertson's TF where the
+TF-IDF of document $d$ and query $q$ is defined as:
+$$
+TF-IDF_{d, q} = \frac{
+    tf * k_1 * log(\frac{N}{df})}{
+    tf + k_1 * (1-b + b * \frac{|d|}{avg_{d^\prime} |d^\prime|})
+},
+$$
+
+where $k_1 = 1.2$ and $b = 0.75$ are constants.
+}
+
+\RunResults{baselines}{\RunName{run-0} and \RunName{run-0-tfidf}}
+
+As can be seen from the results TF-IDF improved results considerably by more
+than doubling both MAP and P@10.
+
+\subsection{Tokenization}
+
+\Run{run-0-pyterrier-tok}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{-}{-}{Robertson's TF-IDF}{Improved tokenization using PyTerrier's
+builting tokenizers. 'english' is specialized tokenizer for English, while 'utf'
+is general tokenizer applicable not only to Czech.}
+
+\Run{run-0-nltk-tok}{
+    nltk's
+    tokenizers\footnote{\url{https://www.nltk.org/api/nltk.tokenize.html}};
+    'english' for English dataset, 'czech' for Czech dataset}{-}{-}{Robertson's TF-IDF}{Improved
+tokenization using nltk's tokenizers specialized per each language.}
+
+
+\RunResults{tokenizers}{\RunName{run-0-pyterrier-tok} and \RunName{run-0-nltk-tok}}
+
+As can be seen from the results using specialized tokenization algorithm instead
+of splitting with regex has number of advantages. Surprisingly nltk's tokenization
+does not perform as well as PyTerrier's. And so, going forward I will use
+PyTerrier's 'english' tokenization for English dataset and 'utf' for Czech
+dataset.
+
+\subsection{Stopwords}
+
+\Run{run-0-pyterrier-stop}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{builtin PyTerrier's stopwords list for English dataset only}{-}{Robertson's
+TF-IDF}{Incorporating PyTerrier's English stopword list. Since there is no Czech
+alternative, I run this experiment only for the English dataset.
+}
+
+\Run{run-0-nltk-stop}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{nltk English stopword list }{-}{Robertson's TF-IDF}{
+    Using nltk's English stopword list. Same as with PyTerrier's list, there is
+    no Czech alternative and so I again ran this experiment only for the English
+    data.
+}
+
+\Run{run-0-kaggle-stop}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+    }{
+        Kaggle Czech stopword list\footnote{\url{https://www.kaggle.com/datasets/heeraldedhia/stop-words-in-28-languages?select=czech.txt}}
+    }{-}{Robertson's TF-IDF}{
+        Using random stopword list found online. The main goal of this
+        experiment was to find some stopwords for the Czech dataset and so it
+        was ran only against the Czech documents.
+    }
+
+\RunResults{stopwords}{\RunName{run-0-pyterrier-stop}, \RunName{run-0-nltk-stop}
+and \RunName{run-0-kaggle-stop}}
+
+Clearly stopword lists do not make much of a difference. In the case of the
+English dataset they slightly worsen the results, while for the Czech dataset
+the effect is opposite. Going forward I will use the Kaggle Czech stopword list
+for the Czech data and no stopwords for the English data.
+
+\subsection{Stemming{\textbackslash}Lemmatization}
+
+\Run{run-0-porter-stemm}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    PyTerrier's Porter stemmer
+}{Robertson's TF-IDF}{Stemming documents for both languages with Porter stemmer.}
+
+\Run{run-0-snowball-stemm}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    PyTerrier's Snowball stemmer
+}{Robertson's TF-IDF}{Stemming documents for both languages with Snowball stemmer.}
+
+\Run{run-0-udpipe-lemm}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Lemmatization using UDPipe
+    2\footnote{\url{https://ufal.mff.cuni.cz/udpipe/2}} with the 'czech' model
+}{Robertson's TF-IDF}{
+    I tried to use lemmatization as well using UDPipe 2. While I found the
+installation and running of the software quite easy, I lacked the hardware
+resources to run the experiments efficiently. I was able to run lemmatization
+two times (both took more than 8h) for the Czech dataset only.
+}
+
+\Run{run-0-czech-stemm}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech 
+    stemmer\footnote{\url{http://members.unine.ch/jacques.savoy/clef/index.html}}
+    implemented by Prof. Jacques Savoy, 'light' version
+}{Robertson's TF-IDF}{
+    To improve my results for the Czech dataset I searched for stemmer online. The
+only stemmer I found was one implemented by Prof. Jacques Savoy. Even though the
+stemmer is designed for Czech I ran it also against the English dataset.
+}
+
+\RunResults{stemmers}{\RunName{run-0-porter-stemm},
+\RunName{run-0-snowball-stem}, \RunName{run-0-udpipe-lemm} and
+\RunName{run-0-czech-stemm}}
+
+The best stemmer for English seems to be the Snowball stemmer, though the
+difference is only marginal. The Czech stemmer by Jacques Savoy did improve the
+results considerably for the Czech dataset, while expectedly worsen the score
+for the English dataset. Unfortunately I was not able to find the bug in my
+\RunName{run-0-udpipe-lemm} run.
+
+Going forward I will use the Czech stemmer for Czech and Snowball stemmer for
+English.
+
+\subsection{Weighting models}
+
+\Run{run-0-tfidf-pivoted}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{TF-IDF with Pivoted length normalization}{}
+
+\Run{run-0-tfidf-pivoted-robertson}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{TF-IDF with Pivoted Robertson's normalization}{Instead of the usual length
+normalization, PyTerrier offers also a Robertson's normalization
+\cite{robertson_pivot}.}
+
+\Run{run-0-bm25}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{BM25}{}
+
+\Run{run-0-pl2}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{PL2}{}
+
+\pagebreak
+
+\Run{run-0-lemur-tfidf}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{Lemur\footnote{\url{http://www.lemurproject.org}}'s version of TF-IDF,
+implemented by Terrier}{}
+
+\RunResults{wmodels}{\RunName{run-0-tfidf-pivoted},
+\RunName{run-0-tfidf-pivoted-robertson}, \RunName{run-0-bm25},
+\RunName{run-0-pl2} and \RunName{run-0-lemur-tfidf}}
+
+Unfortunately none of the tried weighting models were able to improve the
+benchmark set by the initial Robertson's TF-IDF.
+
+Before we move to query expansion, let us define \RunName{run-1} composing the
+best configuration yet to be found.
+
+\Run{run-1}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{Robertson's TF-IDF}{Represents the best configuration I have came across in
+my experiments.}
+
+
+\subsection{Query expansion}
+
+\RunQE{run-2}{
+    builtin PyTerrier tokenizers; 'english' for English dataset, 'utf' for Czech dataset
+}{
+    Kaggle Czech stopword list for Czech data only
+}{
+    Czech stemmer implemented by Prof. Jacques Savoy, 'light' version for Czech;
+    Snowball stemmer for English
+}{Robertson's TF-IDF}{divergence from Randomness query expansion model using PyTerrier's built in 'Bo1' model}{\RunName{run-1} with query expansion.}
+
+\RunResults{query_expansion}{\RunName{run-2}}
+
+As can be seen from the results query expansion helped tremendously to the
+Czech dataset, but improved results for the English dataset only marginally.
+
+\section{Conclusion}
+
+I have built an IR system using PyTerrier and Terrier. Throughout my experiments
+I managed to improve MAP scores by almost 0.41 for the Czech dataset and by
+almost 0.3 for the English dataset.
+
+\RunResults{final}{\RunName{run-0} and \RunName{run-2}}
+
+\bibliography{biblio}
+\end{document}
+

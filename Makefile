@@ -3,6 +3,8 @@ TREC_EVAL_BIN := ./trec_eval
 RES_DIR := ./results
 EVAL_DIR := ./evals
 
+.PHONY: run-all run-rm slopes report beamer results
+
 %_train_en.eval: %_train_en.res
 	$(TREC_EVAL_BIN) -M1000 $(ASSIGNMENT_DIR)/qrels-train_en.txt $(RES_DIR)/$^ > $(EVAL_DIR)/$@
 
@@ -32,9 +34,27 @@ run-rm:
 	rm $(RES_DIR)/$(run)_test_cs.res $(RES_DIR)/$(run)_train_cs.res
 
 slopes:
-	python main.py -q A1/topics-train_$(lan).xml -d A1/documents_$(lan).lst -o supplementary/$(run)_slopes_$(lan).csv --slopes 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 --run $(run)_$(lan) --qrels A1/qrels-train_$(lan).txt --pivoted_wmodel cz.dburian.TfIdfLengthPivoted
-	python main.py -q A1/topics-train_$(lan).xml -d A1/documents_$(lan).lst -o supplementary/$(run)_robertson_slopes_$(lan).csv --slopes 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 --run $(run)_$(lan) --qrels A1/qrels-train_$(lan).txt --pivoted_wmodel cz.dburian.TfIdfRobertsonPivoted
+	python main.py -q A1/topics-train_$(lan).xml -d A1/documents_$(lan).lst -o supplementary/$(run)_slopes_$(lan).csv --slopes 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 --run $(run)_$(lan) --qrels A1/qrels-train_$(lan).txt --pivoted_wmodel cz.dburian.ir.terrier.TfIdfLengthPivoted
+	python main.py -q A1/topics-train_$(lan).xml -d A1/documents_$(lan).lst -o supplementary/$(run)_robertson_slopes_$(lan).csv --slopes 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 --run $(run)_$(lan) --qrels A1/qrels-train_$(lan).txt --pivoted_wmodel cz.dburian.ir.terrier.TfIdfRobertsonPivoted
 
+all_report_files = $(wildcard report/*.tex)
+report: ./report/report.tex  $(all_report_files)
+	pdflatex -output-directory report $<
+	cd report && bibtex report.aux
+	pdflatex -output-directory report $<
+	pdflatex -output-directory report $<
 
-submission:
+all_beamer_files = $(wildcard beamer/*.tex)
+beamer: ./beamer/beamer.tex $(all_beamer_files)
+	pdflatex -output-directory beamer $<
+	pdflatex -output-directory beamer $<
+
+results:
+	python scripts/table.py -i $(run) -o supplementary/$(name)_table.tex
+	python scripts/graph.py -i $(run) -o supplementary/$(name)_graph.png
+
+submission.zip: beamer report
+	zip submission.zip -r src results evals java main.py requirements.txt Makefile README.md scripts pyterrier_home ./report/report.pdf ./beamer/beamer.pdf
+	zip submission.zip -d "*/target*" -r "*/__pycache__*"
+
 
