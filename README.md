@@ -1,7 +1,8 @@
 [./main]: ./main.py
 [./Makefile]: ./Makefile
 [terrier]: https://github.com/terrier-org/terrier-core
-[pyterrire]: https://github.com/terrier-org/pyterrier
+[pyterrier]: https://github.com/terrier-org/pyterrier
+[report]: ./report/report.pdf
 # IR with PyTerrier
 
 My play-around IR project with [PyTerrier][pyterrier]/[Terrier][terrier].
@@ -18,7 +19,7 @@ There are numerous experiments testing different setups called *runs*. You can
 therefore experiment with different runs.
 
 Detailed description of the different experiments can be found in the
-[report][]. TODO:
+[report][report].
 
 ## Installation
 
